@@ -1,0 +1,153 @@
+---
+title: "Covid-19 Vaccine Effects EAVE Cohort"
+author: "Chris Robertson, Emily Moore, Eleftheria Vasileiou, Jim McMenamin, Colin Simpson,  Aziz Sheikh"
+date: ' `r format(Sys.Date(), "%d %B %Y")` '
+output: html_document
+---
+
+```{r setup, include=FALSE,echo = FALSE, warning=FALSE, error=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, error=FALSE)
+
+# 01 Setup ####
+#Libraries
+library(plyr)
+library(tidyverse)
+library(survival)
+#library(htmltools)
+#Load data
+
+Location <- "/conf/"  # Server
+#Location <- "//isdsf00d03/"  # Desktop
+project_path <- paste0(Location,"EAVE/GPanalysis/progs/CR/Vaccine")
+
+results_list <- readRDS(paste0(project_path,"/output/temp/CR_cohort_summary_hosp_covid.RDS"))
+results <- results_list$results
+results <- filter(results, !(Vacc.Status %in% c("v2_0:6",   "v2_7+")))
+results$Vacc.Status <- factor(results$Vacc.Status, levels = c("uv", "v1_0:6","v1_7:13",
+      "v1_14:20", "v1_21:27", "v1_28:34", "v1_35:41", "v1_42+" ,  "v2_0:6",   "v2_7+"))
+
+upper_plot_limit <- 5
+lower_plot_limit <- 0.05
+
+unique_groups <- unique(results$id) #this is an integer id number
+n_groups <- length(unique_groups)
+```
+
+## Introduction
+
+The endpoint is this report is `r results_list$endpoint`.  There are `r results_list$number_events` events from December 08, 2020 until `r format(results_list$last_event, "%d %B %Y")`.  The adjusted estimates in this report represent those obtained from `r results_list$adjustment` adjustment.  The adjusted estimates are obtained from `r results_list$prop_score`.
+
+These estimates are based upon a cohort design where vaccination records are linked to Ecoss, SMR01 and Rapid for hospitalisations for COVID 19 or admission following a positive test, within 28 days.
+
+The Ecoss data includes all PCR test results from both pillar 1 (NHS labs) and pillar 2 (Lighthouse government labs).
+
+Data were extracted for  between 8th December 2020 and `r format(results_list$last_event, "%d %b %Y")`.  
+
+The linkage to the national vaccination record within GP practices was achieved using the community health index (EAVE Study link number).  
+
+Individuals who have previously tested PCR positive for covid 19 prior to 8th December 2020 are excluded from this analysis.
+
+Only vaccinations up to and including the last date of an event were included.  Everyone vaccinated after the date of the last event among the cases was treated as unvaccinated in this analysis.
+
+The EAVE-II study design was used for clinical risk group information from GP records.  Also
+
+
+## Statistical Methods
+
+A cohort design was used to estimate the odds of vaccination in PCR confirmed cases compared to those testing negative. 
+
+This analysis  includes both the Pfizer/BioNTech vaccine and the AZ vaccine. For vaccine specific analysis individuals who received the other vaccine were not included.
+
+The following time periods between vaccination and date of event are considered: post dose 1: 0--6 days, 7-13 days, 1 week : 14-20 days,  2w : 21-27 days, 3w : 21-28 days, up to and 6+ weeks; and post dose 2: 0-6 days , 7+ days.  
+
+Analysis was by cox regression  with spline terms for age,  number of PCR tests prior to vaccination.  Further adjustment was made for gender and deprivation and number of clinical risk groups (0, 1, 2, 3,4, 5+).  Calendar time, in weeks, was included as a stratification variable as the background risk of hositalisation varied over time.  This is the minimal adjustment.  Full adjustment included additional clinical variables instead of the summary number of clincial risk groups.
+
+The analysis was repeated using poisson regression, with age groups and test groups.  The poisson regression results are presented.  The statistical model results are derived from a subset of the who data by selecting `r results_list$controls_per_event` without the event for each event and performing a weighted regression.  The weights reflected two aspects.  Firstly the sample weights to correct for the size of the GP population being bigger than the population in Scotland.  These weights were derived by matching the age and gender numbers in the GP data to the scottish population data.  The second weights reflected the sampling fraction of controls in the modelling.
+
+A logisitic regression model was used to derive a propensity score for vaccination and inverse probability score weights used in the regresssion models.
+
+In the plots the lower and upper limits of the confidence intervals are truncated at `r lower_plot_limit` and `r upper_plot_limit` respectively.
+
+
+
+
+```{r table_1, , results='asis', include=TRUE}
+options(knitr.kable.NA = '')
+
+for (i in unique_groups) { 
+  
+  #i <- unique_groups[1]
+  
+  results_i <- filter(results, id==i)
+  
+  cat("\n##",as.character(unique(results_i$title)), " \n") 
+
+z_res <- results_i %>% dplyr::select(Vacc.Status:Events, HR_raw:UCL_raw, HR_adj:UCL_adj) %>% 
+  dplyr::select(-Count)
+
+z_res_1 <- z_res %>% 
+    mutate( UCL_raw = ifelse(UCL_raw > 100*upper_plot_limit , NA, UCL_raw),
+            UCL_adj = ifelse(UCL_adj > 100*upper_plot_limit , NA, UCL_adj)
+             )
+
+ z_tab <- kableExtra::kbl(z_res_1, 
+                           caption = "Numbers and Hazard Ratios", digits=c(NA,0,0,rep(2,6)), 
+                           col.names = c("Vaccine Group","Person Years","Number Events",
+                                         "HR","LCL","UCL","HR","LCl","UCL" )) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left") %>%
+    kableExtra::column_spec(2:3, width="6em") %>% 
+    kableExtra::column_spec(c(4,7), width="5em") %>% 
+    kableExtra::add_header_above(c(" " = 3, "Unadjusted" = 3, "Adjusted" = 3))
+
+
+
+print(z_tab)
+
+z_res <- z_res %>% 
+    mutate( UCL_raw = ifelse(UCL_raw > upper_plot_limit , upper_plot_limit, UCL_raw),
+            UCL_adj = ifelse(UCL_adj > upper_plot_limit , upper_plot_limit, UCL_adj),
+            HR_raw = ifelse(HR_raw > upper_plot_limit , upper_plot_limit, HR_raw),
+            HR_adj = ifelse(HR_adj > upper_plot_limit , upper_plot_limit, HR_adj), 
+            LCL_raw = ifelse(LCL_raw < lower_plot_limit, lower_plot_limit, LCL_raw),
+            LCL_adj = ifelse(LCL_adj < lower_plot_limit, lower_plot_limit, LCL_adj),
+            HR_raw = ifelse(HR_raw < lower_plot_limit, lower_plot_limit, HR_raw),
+            HR_adj = ifelse(HR_adj < lower_plot_limit, lower_plot_limit, HR_adj) )
+  
+
+
+g1 <- z_res %>% ggplot(aes(Vacc.Status, y= HR_adj)) + geom_point() +
+  geom_errorbar(aes(ymin = LCL_adj, ymax = UCL_adj), width = 0.2) + geom_hline(yintercept=1)+
+  labs(x="days from first vaccination dose", y= "Adjusted Hazard Ratio", 
+       title = paste(unique(results_i$title))) + scale_y_log10() + 
+  theme_classic() 
+
+print(g1)
+
+  cat("  \n")
+  cat("  \n")
+  cat("  \n")
+  
+}
+
+```
+
+
+##EAVE-II
+
+We linked individual patient-level data from all primary, secondary, mortality and virological/serological testing data in Scotland. We used this national dataset to investigate the temporal progression of COVID-19 in the Scottish population and the development of COVID-19 morbidity and mortality in individuals. 
+
+###Study design
+
+Almost all the residents in Scotland (including children) are registered with primary care, which provides a comprehensive array of health-care services (free at the point of care), including the issuing of prescriptions for medications. Access to secondary care is typically through a general practitioner (GP) based within a primary care practice or via the emergency department (ED) or out-of-hours primary care services. During the acute phase of the pandemic, community based COVID-19 hubs (a GP-led service designed to segment patients and reduce the risk of nosocomial infections) were established. We used anonymised individual patient-level data from general practices, hospitals, death registry, and reverse-transcriptase polymerase chain reaction (RT-PCR) testing (including NHS and UK Government testing centre data) to investigate the changing dynamics of COVID-19 during 2020.
+
+We developed an open cohort drawn from patients registered with any primary care practice in Scotland from March 1st 2020. 
+
+###Datasets
+We used data from all 929 Scottish primary care practices. Clinical data collected by primary care in Scotland have consistently been shown to be of high quality (90% completeness and accuracy) and their value for epidemiologic research has been repeatedly demonstrated. These were linked to other datasets including the Electronic Communication of Surveillance in Scotland ECOSS (all virology testing national database), the Scottish Morbidity Record (hospitalisation including ICU stay), and National Records Scotland (death certification).
+
+
+### Funding
+
+EAVE II is funded by the Medical Research Council and the National Institute for Health Research Health Technology Assessment Programme, with the support of BREATHE – The Health Data Research Hub for Respiratory Health, funded through the UK Research and Innovation Industrial Strategy Challenge Fund and delivered through Health Data Research UK. Additional support through the Scottish Government Director General Health and Social Care
+
+
