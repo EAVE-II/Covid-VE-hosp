@@ -24,8 +24,8 @@ z_combine_vacc_level <- TRUE  # to combine the first 1 or 2 levels of vacc_statu
 output_list$combine_levels <- z_combine_vacc_level
 z_adjustment <- "full" #or "minimal" "full
 output_list$adjustment <- z_adjustment
-output_list$prop_score <- "no propensity weighting" 
-#"no propensity weighting"  "inverse propensity weighting"
+output_list$prop_score <- "inverse propensity weighting" 
+#"no propensity weighting"  "no propensity weighting"
 output_list$model <- "glm" 
 #"cox"  "glm"
 
@@ -65,7 +65,7 @@ for (i in 1:nrow(data_selection_flags)) {
   if (data_selection_flags[i,"omit_prev_tests"] == "1w") z_df <- filter(z_df, test_before_dec8 %in% c("0-6d","no pos test","post-vacc") )
   
   z_df$n_tests_gp <- cut(z_df$n_tests, breaks = c(-1,0,1,2,3,9,100), labels=c("0","1","2","3","4-9","10+"))
-  
+  z_df$age_gp <- relevel(z_df$age_gp, ref="60-64")
 #z.yr <- tcut(rep(0,nrow(analysis.df)), c(-1,seq(7,as.numeric(a.analysis.to-a.analysis.from),by=7) ))
 #aggregate for overall
 z.agg <- pyears(Surv(start,stop,event) ~ vacc_status, data=z_df , weight=weight, scale=365.25, data.frame=TRUE)
@@ -196,5 +196,8 @@ names(z_res) <- gsub("^OR_", "HR_", names(z_res))
 names(z_res) <- gsub("^HR_LCL_", "LCL_", names(z_res))
 names(z_res) <- gsub("^HR_UCL_", "UCL_", names(z_res))
 output_list$results <- z_res
-saveRDS(output_list,paste0(project_path,"/output/temp/CR_cohort_summary_",z_event_endpoint,".RDS"))
-write_csv(output_list$results, paste0(project_path,"/output/temp/CR_cohort_summary_",z_event_endpoint,".csv"))
+z_ipw <- if (output_list$prop_score=="inverse propensity weighting") "ipw" else "adj"
+z_fname <- paste0(project_path,"/output/temp/CR_cohort_",z_ipw,"_",z_event_endpoint,".RDS")
+saveRDS(output_list,z_fname)
+z_fname <- paste0(project_path,"/output/temp/CR_cohort_",z_ipw,"_",z_event_endpoint,".csv")
+write_csv(output_list$results, z_fname)

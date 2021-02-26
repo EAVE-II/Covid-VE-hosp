@@ -25,7 +25,7 @@ a_end <- max(z_event$admission_date)
 output_list$endpoint <- z_event_endpoint
 output_list$number_events <- nrow(z_event)
 output_list$last_event <- a_end
-z_n_controls_per_event <- 50
+z_n_controls_per_event <- 50 #faster than 100
 output_list$controls_per_event <- z_n_controls_per_event
 
 #make anyone vaccinated after the maximum endpoint time unvaccinated

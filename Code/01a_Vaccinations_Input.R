@@ -25,7 +25,7 @@ Location <- "/conf/"  # Server
 
 project_path <- paste0(Location,"EAVE/GPanalysis/progs/CR/Vaccine")
 
-EAVE_cohort <- readRDS(paste0(Location,"EAVE/GPanalysis/outputs/temp/Cohort_Demog_Endpoints_Times2021-02-16.rds"))
+EAVE_cohort <- readRDS(paste0(Location,"EAVE/GPanalysis/outputs/temp/Cohort_Demog_Endpoints_Times2021-02-24.rds"))
 EAVE_cohort <- filter(EAVE_cohort, !duplicated(EAVE_LINKNO))
 
 table(EAVE_cohort$death_covid, is.na(EAVE_cohort$NRS.Date.Death), exclude=NULL)
@@ -125,19 +125,19 @@ Vaccinations <- Vaccinations %>% filter(vacc_type %in% c("AZ","PB")) %>%
   filter( !(!is.na(vacc_type_2) & (vacc_type_2 != vacc_type)))
 
 #read in the PHS vaccination data -- be careful about the name
-#z  <- readRDS(paste0(Location,"EAVE/GPanalysis/data/Vaccination.RDS"))
+#z  <- readRDS(paste0(Location,"EAVE/GPanalysis/data/Vaccinations.rds"))
 #table(z$EAVE_LINKNO %in% Vaccinations$EAVE_LINKNO)
-#table(Vaccinations$EAVE_LINKNO %in% z$EAVE_LINKNO)
-#Vaccinations  <- filter(Vaccinations, !(EAVE_LINKNO %in% z$EAVE_LINKNO))
+#table(Vaccinations$EAVE_LINKNO %in% z$EAVE_LINKNO) #only 3518 extra cases 24/02 - not much point
+#z_vacc  <- filter(Vaccinations, !(EAVE_LINKNO %in% z$EAVE_LINKNO))
 #z1 <- z %>% dplyr::rename(vacc_type = vacc_type_desc, vacc_type_2 = vacc_type_desc_2) %>% 
 #  dplyr::select(EAVE_LINKNO, vacc_type, vacc_type_2, date_vacc_1, date_vacc_2 ) %>% as.data.frame()
 
 
-#z2 <- bind_rows(z1,Vaccinations)
+#z2 <- bind_rows(z1,z_vacc)
 #table(as.numeric(z2$date_vacc_2-z2$date_vacc_1))
 
 #Vaccinations <- z2
-rm(z,z1,z2)
+rm(z,z1,z2, z_vacc)
 
 #read in covid hositalisations since Dec 01
 #derived from linking ecoss to rapid - first admission following a positive test
@@ -153,16 +153,17 @@ z <- EAVE_cohort %>% dplyr::select(EAVE_LINKNO, SpecimenDate, hosp_covid, date_h
   filter(hosp_covid==1) %>% 
   filter(date_hosp_covid > a_begin) %>% 
   dplyr::rename(admission_date = date_hosp_covid) %>% 
-  mutate(admission_date = if_else(admissions_date <= NRS.Date.Death, admissions_date, NRS.Date.Death))
+  mutate(admission_date = if_else(is.na(NRS.Date.Death) | !is.na(NRS.Date.Death)&(admission_date <= NRS.Date.Death), admission_date, NRS.Date.Death)) %>% 
   dplyr::select(-hosp_covid, -NRS.Date.Death)
 covid_hospitalisations <- z
 
 #use the EAVE severe cases
-z <- EAVE_cohort %>% dplyr::select(EAVE_LINKNO, SpecimenDate, icu_death, date_icu_death) %>% 
+z <- EAVE_cohort %>% dplyr::select(EAVE_LINKNO, SpecimenDate, icu_death, date_icu_death, NRS.Date.Death) %>% 
   filter(icu_death==1) %>% 
   filter(date_icu_death > a_begin) %>% 
   dplyr::rename(admission_date = date_icu_death) %>% 
-  dplyr::select(-icu_death)
+  mutate(admission_date = if_else(is.na(NRS.Date.Death) | !is.na(NRS.Date.Death)&(admission_date <= NRS.Date.Death), admission_date, NRS.Date.Death)) %>% 
+  dplyr::select(-icu_death, -NRS.Date.Death)
 covid_icu_death <- z
 
 #use the EAVE death cases
@@ -215,10 +216,13 @@ z_ps <- predict(z1, newdata=z, type="response")
    mutate(inv_psw = if_else(inv_psw > quantile(inv_psw, 0.95), quantile(inv_psw, 0.95), inv_psw)) %>% 
    mutate(inv_psw = inv_psw/mean(inv_psw))
 
- df_cohort <- z %>% dplyr::select(-date_vacc_1, -vacc)
+df_cohort <- z %>% dplyr::select(-date_vacc_1, -vacc)
+df_cohort$n_tests_gp <- cut(df_cohort$n_tests, breaks = c(-1,0,1,2,3,9,100), labels=c("0","1","2","3","4-9","10+"))
+
+ 
  
  #adjustment variables
- variables_hosp <- c("age_gp" , "EAVE_BP","Q_DIAG_DIABETES_2"   , "Q_DIAG_COPD"  ,       
+ variables_hosp <- c("age_gp" , "Sex", "simd2020_sc_quintile", "n_tests_gp", "EAVE_BP","Q_DIAG_DIABETES_2"   , "Q_DIAG_COPD"  ,       
                      "Q_DIAG_CKD_LEVEL","Q_DIAG_DEMENTIA","Q_DIAG_STROKE","Q_LEARN_CAT"   ,      
                      "Q_DIAG_FRACTURE","Q_DIAG_NEURO","Q_DIAG_CCF","Q_DIAG_ASTHMA"    ,   
                      "Q_DIAG_EPILEPSY","Q_DIAG_BLOOD_CANCER","Q_DIAG_VTE","Q_DIAG_CIRRHOSIS" ,   

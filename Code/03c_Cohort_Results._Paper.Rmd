@@ -20,28 +20,45 @@ Location <- "/conf/"  # Server
 #Location <- "//isdsf00d03/"  # Desktop
 project_path <- paste0(Location,"EAVE/GPanalysis/progs/CR/Vaccine")
 
-results_list <- readRDS(paste0(project_path,"/output/temp/CR_cohort_summary_hosp_covid.RDS"))
-results <- results_list$results
-results <- filter(results, !(Vacc.Status %in% c("v2_0:6",   "v2_7+")))
-results$Vacc.Status <- factor(results$Vacc.Status, levels = c("uv", "v1_0:6","v1_7:13",
+results_list_adj <- readRDS(paste0(project_path,"/output/temp/CR_cohort_adj_hosp_covid.RDS"))
+results_adj <- results_list_adj$results
+#results_adj <- filter(results_adj, !(Vacc.Status %in% c("v2_0:6",   "v2_7+")))
+results_adj$Vacc.Status <- factor(results_adj$Vacc.Status, levels = c("uv", "v1_0:6","v1_7:13",
       "v1_14:20", "v1_21:27", "v1_28:34", "v1_35:41", "v1_42+" ,  "v2_0:6",   "v2_7+"))
+
+
+results_list_ipw <- readRDS(paste0(project_path,"/output/temp/CR_cohort_ipw_hosp_covid.RDS"))
+results_ipw <- results_list_ipw$results
+#results_ipw <- filter(results_ipw, !(Vacc.Status %in% c("v2_0:6",   "v2_7+")))
+results_ipw$Vacc.Status <- factor(results_ipw$Vacc.Status, levels = c("uv", "v1_0:6","v1_7:13",
+      "v1_14:20", "v1_21:27", "v1_28:34", "v1_35:41", "v1_42+" ,  "v2_0:6",   "v2_7+"))
+
+
 
 upper_plot_limit <- 5
 lower_plot_limit <- 0.05
 
-unique_groups <- unique(results$id) #this is an integer id number
+unique_groups <- unique(results_adj$id) #this is an integer id number
 n_groups <- length(unique_groups)
+
+if (results_list_adj$endpoint == "death_covid") z_endpoint <-  "Covid 19 Death"
+if (results_list_adj$endpoint == "hosp_covid") z_endpoint <-  "Hospitalisation for Covid 19"
+if (results_list_adj$endpoint == "icu_death") z_endpoint <-  "Severe Outcome - ICU or Covid Death"
+
+
 ```
+
+##  Endpoint: `r z_endpoint`
 
 ## Introduction
 
-The endpoint is this report is `r results_list$endpoint`.  There are `r results_list$number_events` events from December 08, 2020 until `r format(results_list$last_event, "%d %B %Y")`.  The adjusted estimates in this report represent those obtained from `r results_list$adjustment` adjustment.  The adjusted estimates are obtained from `r results_list$prop_score`.
+The endpoint is this report is `r results_list_adj$endpoint`.  There are `r results_list_adj$number_events` events from December 08, 2020 until `r format(results_list_adj$last_event, "%d %B %Y")`.  The adjusted estimates in this report represent those obtained from `r results_list_adj$adjustment` adjustment.  Additionally the adjusted estimates are obtained from inverse propensity weighting.
 
 These estimates are based upon a cohort design where vaccination records are linked to Ecoss, SMR01 and Rapid for hospitalisations for COVID 19 or admission following a positive test, within 28 days.
 
 The Ecoss data includes all PCR test results from both pillar 1 (NHS labs) and pillar 2 (Lighthouse government labs).
 
-Data were extracted for  between 8th December 2020 and `r format(results_list$last_event, "%d %b %Y")`.  
+Data were extracted for  between 8th December 2020 and `r format(results_list_adj$last_event, "%d %b %Y")`.  
 
 The linkage to the national vaccination record within GP practices was achieved using the community health index (EAVE Study link number).  
 
@@ -62,9 +79,9 @@ The following time periods between vaccination and date of event are considered:
 
 Analysis was by cox regression  with spline terms for age,  number of PCR tests prior to vaccination.  Further adjustment was made for gender and deprivation and number of clinical risk groups (0, 1, 2, 3,4, 5+).  Calendar time, in weeks, was included as a stratification variable as the background risk of hositalisation varied over time.  This is the minimal adjustment.  Full adjustment included additional clinical variables instead of the summary number of clincial risk groups.
 
-The analysis was repeated using poisson regression, with age groups and test groups.  The poisson regression results are presented.  The statistical model results are derived from a subset of the who data by selecting `r results_list$controls_per_event` without the event for each event and performing a weighted regression.  The weights reflected two aspects.  Firstly the sample weights to correct for the size of the GP population being bigger than the population in Scotland.  These weights were derived by matching the age and gender numbers in the GP data to the scottish population data.  The second weights reflected the sampling fraction of controls in the modelling.
+The analysis was repeated using poisson regression, with age groups and test groups.  The poisson regression results are presented.  The statistical model results are derived from a subset of the who data by selecting `r results_list_adj$controls_per_event` without the event for each event and performing a weighted regression.  The weights reflected two aspects.  Firstly the sample weights to correct for the size of the GP population being bigger than the population in Scotland.  These weights were derived by matching the age and gender numbers in the GP data to the scottish population data.  The second weights reflected the sampling fraction of controls in the modelling.
 
-A logisitic regression model was used to derive a propensity score for vaccination and inverse probability score weights used in the regresssion models.
+A logistic regression model was used to derive a propensity score for vaccination and inverse probability score weights used in the regresssion models.
 
 In the plots the lower and upper limits of the confidence intervals are truncated at `r lower_plot_limit` and `r upper_plot_limit` respectively.
 
@@ -77,33 +94,101 @@ options(knitr.kable.NA = '')
 for (i in unique_groups) { 
   
   #i <- unique_groups[1]
-  
-  results_i <- filter(results, id==i)
-  
-  cat("\n##",as.character(unique(results_i$title)), " \n") 
 
-z_res <- results_i %>% dplyr::select(Vacc.Status:Events, HR_raw:UCL_raw, HR_adj:UCL_adj) %>% 
-  dplyr::select(-Count)
+results_i <- filter(results_adj, id==i)
+results_ipw_i <- filter(results_ipw, id==i)
 
-z_res_1 <- z_res %>% 
-    mutate( UCL_raw = ifelse(UCL_raw > 100*upper_plot_limit , NA, UCL_raw),
-            UCL_adj = ifelse(UCL_adj > 100*upper_plot_limit , NA, UCL_adj)
-             )
+cat("\n##",as.character(unique(results_i$title)), " \n") 
 
- z_tab <- kableExtra::kbl(z_res_1, 
-                           caption = "Numbers and Hazard Ratios", digits=c(NA,0,0,rep(2,6)), 
-                           col.names = c("Vaccine Group","Person Years","Number Events",
-                                         "HR","LCL","UCL","HR","LCl","UCL" )) %>%
-    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left") %>%
-    kableExtra::column_spec(2:3, width="6em") %>% 
-    kableExtra::column_spec(c(4,7), width="5em") %>% 
-    kableExtra::add_header_above(c(" " = 3, "Unadjusted" = 3, "Adjusted" = 3))
+z_res_adj <- results_i %>% dplyr::select(Vacc.Status:Events, HR_raw:UCL_raw, HR_adj:UCL_adj) %>% 
+  dplyr::select(-Count)  %>% 
+  mutate( UCL_raw = ifelse(UCL_raw > 100*upper_plot_limit , NA, UCL_raw),
+          UCL_adj = ifelse(UCL_adj > 100*upper_plot_limit , NA, UCL_adj)
+  )
+
+z_res_ipw <- results_ipw_i %>% dplyr::select(Vacc.Status:Events, HR_adj:UCL_adj) %>% 
+  dplyr::select(-Count)  %>% 
+  mutate(UCL_adj = ifelse(UCL_adj > 100*upper_plot_limit , NA, UCL_adj)
+  ) %>% 
+  dplyr::rename(HR_ipw = HR_adj, LCL_ipw = LCL_adj, UCL_ipw=UCL_adj)
+
+z_check_v <- all(z_res_adj$Vacc.Status == z_res_ipw$Vacc.Status)
+z_check_e <- all(z_res_adj$Events == z_res_ipw$Events)
 
 
+if (!(z_check_e & z_check_v)) cat("***************   checks fail    ********************")
+
+z_res <- bind_cols(z_res_adj, dplyr::select(z_res_ipw,HR_ipw:UCL_ipw))
+
+z_tab <- kableExtra::kbl(z_res, 
+                         caption = "Numbers and Hazard Ratios", digits=c(NA,0,0,rep(2,9)), 
+                         col.names = c("Vaccine Group","Person Years","Number Events",
+                                       "RR","LCL","UCL","RR","LCl","UCL","RR","LCl","UCL" )) %>%
+  kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left") %>%
+  kableExtra::column_spec(2:3, width="6em") %>% 
+  kableExtra::column_spec(c(4,7,10), width="5em") %>% 
+  kableExtra::add_header_above(c(" " = 3, "Age adjusted" = 3, "Adjusted" = 3, "IPW" = 3))
 
 print(z_tab)
 
+z_res <- z_res %>%  mutate(ve=100*(1-HR_ipw), LCL_ve = 100*(1-UCL_ipw), UCL_ve = 100*(1-LCL_ipw))
+
+# Create a new field (OR_adj_CL), containing character strings for Odds Ratios with confidence intervals.
+# pasting strings made from numeric data, to form one larger string
+# This horrendous looking code translates to - add new field containing the string: "OR_adj (OR_LCL_adj - OR_UCL_adj)"
+
 z_res <- z_res %>% 
+  dplyr::mutate(HR_raw_CL = paste(sprintf("%.2f", HR_raw),
+                                  " (",
+                                  sprintf("%.2f", LCL_raw),
+                                  " - ",
+                                  sprintf("%.2f", UCL_raw),
+                                  ")"
+                                  )
+               ) %>% 
+  dplyr::mutate(HR_adj_CL = paste(sprintf("%.2f", HR_adj),
+                                  " (",
+                                  sprintf("%.2f", LCL_adj),
+                                  " - ",
+                                  sprintf("%.2f", UCL_adj),
+                                  ")"
+                                  )
+               ) %>% 
+    dplyr::mutate(HR_ipw_CL = paste(sprintf("%.2f", HR_ipw),
+                                  " (",
+                                  sprintf("%.2f", LCL_ipw),
+                                  " - ",
+                                  sprintf("%.2f", UCL_ipw),
+                                  ")"
+                                  )
+               ) %>% 
+    dplyr::mutate(ve_CL = paste(sprintf("%.0f", ve),
+                                  " (",
+                                  sprintf("%.0f", LCL_ve),
+                                  " - ",
+                                  sprintf("%.0f", UCL_ve),
+                                  ")"
+                                  )
+               )
+
+z_res <- z_res %>% dplyr::select(Vacc.Status, Person.Years, Events, HR_raw_CL, HR_adj_CL, HR_ipw_CL, ve_CL)
+
+z_tab <- kableExtra::kbl(z_res,
+                         col.names = c("Vaccine Group","Person Years","Number Events",
+                                       "RR (95% CI)", "RR (95% CI)", "RR (95% CI)", "VE (95% CI)"),
+                         caption = "Numbers and Rate Ratios",
+                         digits=c(NA,0,0,NA, NA, NA) # specifies precision of col variables. 
+                        ) %>%
+    kableExtra::add_header_above(c(" " = 3, "Age adjusted" = 1, "Adjusted" = 1, "IPW" = 1, "Vaccine Effect" =1)) %>% 
+  kableExtra::kable_styling(full_width = F,
+                            html_font = "Cambria",
+                            bootstrap_options = c("bordered", "hover", "condensed", "responsive"),
+                            position = "center"
+                           ) 
+
+ print(z_tab)
+
+z_res <- z_res_adj %>% 
     mutate( UCL_raw = ifelse(UCL_raw > upper_plot_limit , upper_plot_limit, UCL_raw),
             UCL_adj = ifelse(UCL_adj > upper_plot_limit , upper_plot_limit, UCL_adj),
             HR_raw = ifelse(HR_raw > upper_plot_limit , upper_plot_limit, HR_raw),
@@ -118,7 +203,27 @@ z_res <- z_res %>%
 g1 <- z_res %>% ggplot(aes(Vacc.Status, y= HR_adj)) + geom_point() +
   geom_errorbar(aes(ymin = LCL_adj, ymax = UCL_adj), width = 0.2) + geom_hline(yintercept=1)+
   labs(x="days from first vaccination dose", y= "Adjusted Hazard Ratio", 
-       title = paste(unique(results_i$title))) + scale_y_log10() + 
+       title = paste(unique(results_i$title), results_list_adj$prop_score) ) + scale_y_log10() + 
+  theme_classic() 
+
+print(g1)
+
+  cat("  \n")
+  cat("  \n")
+  cat("  \n")
+
+  z_res <- z_res_ipw %>% 
+    mutate( UCL_ipw = ifelse(UCL_ipw > upper_plot_limit , upper_plot_limit, UCL_ipw),
+             HR_ipw = ifelse(HR_ipw > upper_plot_limit , upper_plot_limit, HR_ipw), 
+            LCL_ipw = ifelse(LCL_ipw < lower_plot_limit, lower_plot_limit, LCL_ipw),
+            HR_ipw = ifelse(HR_ipw < lower_plot_limit, lower_plot_limit, HR_ipw) )
+  
+
+
+g1 <- z_res %>% ggplot(aes(Vacc.Status, y= HR_ipw)) + geom_point() +
+  geom_errorbar(aes(ymin = LCL_ipw, ymax = UCL_ipw), width = 0.2) + geom_hline(yintercept=1)+
+  labs(x="days from first vaccination dose", y= "Adjusted Hazard Ratio", 
+       title = paste(unique(results_i$title), results_list_ipw$prop_score) ) + scale_y_log10() + 
   theme_classic() 
 
 print(g1)
