@@ -6,7 +6,7 @@
 >
 >**DOI:** [Insert DOI of paper here]
 >
->**Paper authors:** Chris Robertson, Eleftheria Vasileiou, Colin R Simpson, Ting Shi, Steven Kerr, Aziz Sheikh et al.
+>**Paper authors:** Eleftheria Vasileiou, Colin R Simpson, Ting Shi, Steven Kerr, Chris Robertson, Aziz Sheikh et al.
 >
 >**Data source:** [Insert link to data source (if publicly available) here]
 
