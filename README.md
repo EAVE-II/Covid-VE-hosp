@@ -2,7 +2,7 @@
 ## Effectiveness of first dose of COVID-19 vaccines against hospital admissions in Scotland: national prospective cohort study of 5.4 million people 
 
 ### Paper Details
-> **Short title:** Covid-VE
+> **Short title:** Covid-VE-hosp
 >
 >**DOI:** [Insert DOI of paper here]
 >
