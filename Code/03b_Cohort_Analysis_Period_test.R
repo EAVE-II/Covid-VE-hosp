@@ -24,7 +24,7 @@ z_combine_vacc_level <- FALSE  # to combine the first 1 or 2 levels of vacc_stat
 output_list$combine_levels <- z_combine_vacc_level
 z_adjustment <- "full" #or "minimal" "full
 output_list$adjustment <- z_adjustment
-output_list$prop_score <- "inverse propensity weighting" 
+output_list$prop_score <- "no propensity weighting" 
 #"no propensity weighting"  "inverse propensity weighting"
 output_list$model <- "glm" 
 #"cox"  "glm"
@@ -36,7 +36,7 @@ rm(z_res)
 
 for (i in 1:nrow(data_selection_flags)) {
   
-  #i <- 1
+  #i <- 2
   
   
   z_df <- df
@@ -64,7 +64,8 @@ for (i in 1:nrow(data_selection_flags)) {
   if (data_selection_flags[i,"omit_prev_tests"] == "2w") z_df <- filter(z_df, !(test_before_dec8 %in% c("1+m", "3w","4w")) )
   if (data_selection_flags[i,"omit_prev_tests"] == "1w") z_df <- filter(z_df, test_before_dec8 %in% c("0-6d","no pos test","post-vacc") )
   
-   z_df$age_gp <- relevel(z_df$age_gp, ref="60-64")
+  z_df$n_tests_gp <- cut(z_df$n_tests, breaks = c(-1,0,1,2,3,9,100), labels=c("0","1","2","3","4-9","10+"))
+  z_df$age_gp <- relevel(z_df$age_gp, ref="60-64")
   #z_df$vacc_status <- relevel(z_df$vacc_status, ref="v1_7:13")
   #drop to 10 controsl per case
   #z_ids_case <- unique(filter(z_df, event==1)$EAVE_LINKNO)
@@ -73,7 +74,7 @@ for (i in 1:nrow(data_selection_flags)) {
   #z_ids <- c(z_ids_case, sample(z_ids_cont, size=round(length(z_ids_cont)*0.20)) )
   #z_df <- filter(z_df, EAVE_LINKNO %in% z_ids)
   
-  #z_df <- filter(z_df, Q_DIAG_CKD_LEVEL==0)
+  
 #z.yr <- tcut(rep(0,nrow(analysis.df)), c(-1,seq(7,as.numeric(a.analysis.to-a.analysis.from),by=7) ))
 #aggregate for overall
 z.agg <- pyears(Surv(start,stop,event) ~ vacc_status, data=z_df , weight=weight, scale=365.25, data.frame=TRUE)
@@ -92,8 +93,8 @@ z_var <- "vacc_status"
 
 #age adjustment
 if (output_list$model == "cox") {
-#z <- coxph( Surv(start, stop, event) ~ get(z_var) + pspline(ageYear),data=z_df)
-z <- coxph( Surv(start, stop, event) ~ get(z_var) + age_gp, data=z_df)
+z <- coxph( Surv(start, stop, event) ~ get(z_var) + pspline(ageYear),data=z_df)
+#z <- coxph( Surv(start, stop, event) ~ get(z_var) , data=z_df)
 #print(summary(z))
 z.estimates.1 <- fun.ve.cox("z_var",z)
 }
@@ -112,8 +113,8 @@ if (z_adjustment == "minimal") {
   if (output_list$model == "cox") {
     #z <- coxph( Surv(start, stop, event) ~ get(z_var) + pspline(ageYear) + Sex + simd2020_sc_quintile, data=z_df)
     z <- coxph( Surv(start, stop, event) ~ get(z_var) + pspline(ageYear, df=2) + Sex + simd2020_sc_quintile +
-                  pspline(n_tests, df=2) + n_risk_gps , data=z_df)
-    #z <- coxph( Surv(start, stop, event) ~ get(z_var) + age_gp + strata(period), data=z_df)
+                  pspline(n_tests, df=2) + n_risk_gps + strata(period), data=z_df)
+    #z <- coxph( Surv(start, stop, event) ~ period, data=z_df)
     #print(summary(z))
    z.estimates.2 <- fun.ve.cox("z_var",z)
    }
@@ -123,16 +124,16 @@ if (z_adjustment == "minimal") {
                   Sex + n_risk_gps +n_tests_gp, data=z_df, weight=weight , scale=365.25, data.frame=TRUE)
     z_pois <- z.agg$data
     z_m <- glm(event ~ offset(log(pyears)) + vacc_status + period + age_gp + simd2020_sc_quintile+
-             Sex + n_risk_gps +n_tests_gp, family=poisson, data=z_pois)
+             Sex + n_risk_gps + n_tests_gp, family=poisson, data=z_pois)
     z.estimates.2 <- fun_ve_glm(z_m, z_type="")
-    summary(z_m)
+    #summary(z_m)
     }
 }  # end minimal
 
 if (z_adjustment == "full") { 
   
   if (output_list$model == "cox") {
-    z.fmla <- as.formula(paste("Surv(start, stop, event)"," ~  get(z_var) + ",
+    z.fmla <- as.formula(paste("Surv(start, stop, event)"," ~  get(z_var) + strata(period) + ",
                                paste(variables_hosp, collapse= "+")))
     if (output_list$prop_score == "inverse propensity weighting")  {
           z <- coxph(z.fmla, data = z_df, weight=inv_psw)
@@ -147,7 +148,7 @@ if (z_adjustment == "full") {
   
   if (output_list$model == "glm") {
     z_pois <- z_df %>% mutate(pyears=stop-start)
-    z.fmla <- as.formula(paste("event"," ~ offset(log(pyears)) + vacc_status + period +",
+    z.fmla <- as.formula(paste("event"," ~ offset(log(pyears)) + vacc_status + period + ",
                              paste(variables_hosp, collapse= "+")))
     if (output_list$prop_score == "inverse propensity weighting")  {
             z_m <- glm(formula = z.fmla  , data=z_pois, family=poisson, weight = inv_psw)

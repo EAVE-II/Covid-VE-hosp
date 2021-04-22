@@ -1,6 +1,6 @@
 ---
-title: "Covid-19 Vaccine Effects EAVE Cohort"
-author: "Chris Robertson, Emily Moore, Eleftheria Vasileiou, Jim McMenamin, Colin Simpson,  Aziz Sheikh"
+title: "Covid-19 Vaccine Effects Case Control EAVE - Hospitalisation following a positive Covid test"
+author: "Chris Robertson, Emily Moore, Jim McMenamin, Aziz Sheikh"
 date: ' `r format(Sys.Date(), "%d %B %Y")` '
 output: html_document
 ---
@@ -20,10 +20,8 @@ Location <- "/conf/"  # Server
 #Location <- "//isdsf00d03/"  # Desktop
 project_path <- paste0(Location,"EAVE/GPanalysis/progs/CR/Vaccine")
 
-results_list <- readRDS(paste0(project_path,"/output/temp/CR_cohort_ipw_hosp_covid.RDS"))
-results <- results_list$results
-results$Vacc.Status <- factor(results$Vacc.Status, levels = c("uv", "v1_0:6","v1_7:13",
-      "v1_14:20", "v1_21:27", "v1_28:34", "v1_35:41", "v1_42+" ,  "v2_0:6",   "v2_7+"))
+results <- readRDS(paste0(project_path,"/output/temp/CR_cc_summary_hosp_covid.RDS")) 
+results$Vacc.Status <- factor(results$vacc_status, levels = c("uv","v1_0:6","v1_7:13",  "v1_14:20", "v1_21:27","v1_28:34","v1_35:41", "v1_42+", "v2_0:6","v2_7+"))
 
 upper_plot_limit <- 5
 lower_plot_limit <- 0.05
@@ -31,40 +29,35 @@ lower_plot_limit <- 0.05
 unique_groups <- unique(results$id) #this is an integer id number
 n_groups <- length(unique_groups)
 ```
-##  Hospitalisation - including the 0-6 day group
 
 ## Introduction
 
-The endpoint is this report is `r results_list$endpoint`.  There are `r results_list$number_events` events from December 08, 2020 until `r format(results_list$last_event, "%d %B %Y")`.  The adjusted estimates in this report represent those obtained from `r results_list$adjustment` adjustment.  The adjusted estimates are obtained from `r results_list$prop_score`.
+These estimates are based upon a nested case control design where vaccination records are linked to Ecoss, NRS Death Records, SMR01 and Rapid for ICU Admission for COVID 19 or Death following a positive test, within 28 days.
 
-These estimates are based upon a cohort design where vaccination records are linked to Ecoss, SMR01 and Rapid for hospitalisations for COVID 19 or admission following a positive test, within 28 days.
+Cases are all individuals with a hospitalisation for covid, within 14 days of a positive test, or covid on the SMR01 record for admission.  10 controls were selected at random, matched on age and gender, from all individuals who had not had severe covid up to the date of the severe outcome in the case. 
 
 The Ecoss data includes all PCR test results from both pillar 1 (NHS labs) and pillar 2 (Lighthouse government labs).
 
-Data were extracted for  between 8th December 2020 and `r format(results_list$last_event, "%d %b %Y")`.  
+Data were extracted for all tests between 8th December 2020 and `r format(Sys.Date()-2, "%d %b %Y")`.  
 
 The linkage to the national vaccination record within GP practices was achieved using the community health index (EAVE Study link number).  
 
-Individuals who have previously tested PCR positive for covid 19 prior to 8th December 2020 are excluded from this analysis.
-
 Only vaccinations up to and including the last date of an event were included.  Everyone vaccinated after the date of the last event among the cases was treated as unvaccinated in this analysis.
 
-The EAVE-II study design was used for clinical risk group information from GP records.  Also
+Individuals who have previously tested PCR positive for covid 19 prior to 8th December 2020 are excluded from this analysis
+
+The EAVE-II study design was used for clinical risk group information fro GP records.  Also
 
 
 ## Statistical Methods
 
-A cohort design was used to estimate the odds of vaccination in PCR confirmed cases compared to those testing negative. 
+A matched case control design was used to estimate the odds of the event. 
 
-This analysis  includes both the Pfizer/BioNTech vaccine and the AZ vaccine. For vaccine specific analysis individuals who received the other vaccine were not included.
+This analysis includes the Pfizer/BioNTech vaccine or both vaccines combined. When considering type specific vaccine effects for the Pfizer/BioNTech vaccine, individuals who had received the AZ vaccine were excluded.
 
 The following time periods between vaccination and date of event are considered: post dose 1: 0--6 days, 7-13 days, 1 week : 14-20 days,  2w : 21-27 days, 3w : 21-28 days, up to and 6+ weeks; and post dose 2: 0-6 days , 7+ days.  
 
-Analysis was by cox regression  with spline terms for age,  number of PCR tests prior to vaccination.  Further adjustment was made for gender and deprivation and number of clinical risk groups (0, 1, 2, 3,4, 5+).  Calendar time, in weeks, was included as a stratification variable as the background risk of hositalisation varied over time.  This is the minimal adjustment.  Full adjustment included additional clinical variables instead of the summary number of clincial risk groups.
-
-The analysis was repeated using poisson regression, with age groups and test groups.  The poisson regression results are presented.  The statistical model results are derived from a subset of the who data by selecting `r results_list$controls_per_event` without the event for each event and performing a weighted regression.  The weights reflected two aspects.  Firstly the sample weights to correct for the size of the GP population being bigger than the population in Scotland.  These weights were derived by matching the age and gender numbers in the GP data to the scottish population data.  The second weights reflected the sampling fraction of controls in the modelling.
-
-A logisitic regression model was used to derive a propensity score for vaccination and inverse probability score weights used in the regresssion models.
+Analysis was by conditional logistic regression.  Further adjustment was made for and deprivation and risk groups.  Calendar time, in weeks, was included as a stratification variable as the background risk of hositalisation varied over time.  
 
 In the plots the lower and upper limits of the confidence intervals are truncated at `r lower_plot_limit` and `r upper_plot_limit` respectively.
 
@@ -82,8 +75,7 @@ for (i in unique_groups) {
   
   cat("\n##",as.character(unique(results_i$title)), " \n") 
 
-z_res <- results_i %>% dplyr::select(Vacc.Status:Events, HR_raw:UCL_raw, HR_adj:UCL_adj) %>% 
-  dplyr::select(-Count)
+z_res <- results_i %>% dplyr::select(Vacc.Status, N, R , HR_raw:UCL_raw, HR_adj:UCL_adj) 
 
 z_res_1 <- z_res %>% 
     mutate( UCL_raw = ifelse(UCL_raw > 100*upper_plot_limit , NA, UCL_raw),
@@ -92,8 +84,8 @@ z_res_1 <- z_res %>%
 
  z_tab <- kableExtra::kbl(z_res_1, 
                            caption = "Numbers and Hazard Ratios", digits=c(NA,0,0,rep(2,6)), 
-                           col.names = c("Vaccine Group","Person Years","Number Events",
-                                         "HR","LCL","UCL","HR","LCl","UCL" )) %>%
+                           col.names = c("Vaccine Group","N","Number Events",
+                                         "HR","LCl","UCL","HR","LCl","UCL" )) %>%
     kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left") %>%
     kableExtra::column_spec(2:3, width="6em") %>% 
     kableExtra::column_spec(c(4,7), width="5em") %>% 

@@ -18,6 +18,7 @@
 library(plyr)
 library(tidyverse)
 library(survival)
+library(lubridate)
 #Load data
 
 Location <- "/conf/"  # Server
@@ -25,7 +26,8 @@ Location <- "/conf/"  # Server
 
 project_path <- paste0(Location,"EAVE/GPanalysis/progs/CR/Vaccine")
 
-EAVE_cohort <- readRDS(paste0(Location,"EAVE/GPanalysis/outputs/temp/Cohort_Demog_Endpoints_Times2021-02-24.rds"))
+#EAVE_cohort <- readRDS(paste0(Location,"EAVE/GPanalysis/outputs/temp/Cohort_Demog_Endpoints_Times2021-02-24.rds"))
+EAVE_cohort <- readRDS(paste0(Location,"EAVE/GPanalysis/outputs/temp/Cohort_Demog_Endpoints_Times2021-04-09.rds"))
 EAVE_cohort <- filter(EAVE_cohort, !duplicated(EAVE_LINKNO))
 
 table(EAVE_cohort$death_covid, is.na(EAVE_cohort$NRS.Date.Death), exclude=NULL)
@@ -97,7 +99,7 @@ Vaccinations <- z %>% mutate(Date = as.Date(occurrence_time)) %>%
                                grepl("TALENT", type) ~ "AZ",
                                type == "39114911000001105" ~ "AZ",
                                type == "39115611000001103" ~ "PB",
-#                              type == "39115611000001105" ~ "PB",
+                               type == "39326911000001101" ~ "Mo",
                                TRUE ~ "UNK"), 
          dose_number = if_else(stage %in% c(0,3), 1L, stage))
 
@@ -120,9 +122,16 @@ rm(z,v1,v2)
 
 print(table(Vaccinations$vacc_type, Vaccinations$vacc_type_2, exclude=NULL))
 #omit inconsistent records
-Vaccinations <- Vaccinations %>% filter(vacc_type %in% c("AZ","PB")) %>% 
-  filter(vacc_type_2 %in% c("AZ","PB") | is.na(vacc_type_2)) %>% 
+Vaccinations <- Vaccinations %>% filter(vacc_type %in% c("AZ","PB", "Mo")) %>% 
+  filter(vacc_type_2 %in% c("AZ","PB", "Mo") | is.na(vacc_type_2)) %>% 
   filter( !(!is.na(vacc_type_2) & (vacc_type_2 != vacc_type)))
+
+#second on same day as first - make one dose
+Vaccinations <- Vaccinations %>% 
+  mutate(vacc_type_2 = if_else(!is.na(date_vacc_2) & (date_vacc_2 == date_vacc_1), NA_character_, vacc_type_2 ) ) %>% 
+  mutate(date_vacc_2 = as.Date(ifelse(!is.na(date_vacc_2) & (date_vacc_2 == date_vacc_1), NA, date_vacc_2 ), origin=as.Date("1970-01-01")) )
+#omit records with second dose too close to first
+Vaccinations <- filter(Vaccinations, is.na(date_vacc_2) | !is.na(date_vacc_2)&(date_vacc_2 > date_vacc_1 + 18))
 
 #read in the PHS vaccination data -- be careful about the name
 #z  <- readRDS(paste0(Location,"EAVE/GPanalysis/data/Vaccinations.rds"))
@@ -138,6 +147,9 @@ Vaccinations <- Vaccinations %>% filter(vacc_type %in% c("AZ","PB")) %>%
 
 #Vaccinations <- z2
 rm(z,z1,z2, z_vacc)
+#Vaccinations <- filter(Vaccinations, date_vacc_1 <= as.Date("2021-02-20"))
+#saveRDS(Vaccinations, paste0(project_path,"/output/temp/Vaccinations_20210308.rds"))
+#Vaccinations <- readRDS(paste0(project_path,"/output/temp/Vaccinations_20210222.rds"))
 
 #read in covid hositalisations since Dec 01
 #derived from linking ecoss to rapid - first admission following a positive test
@@ -182,7 +194,23 @@ z <- EAVE_cohort %>% dplyr::select(EAVE_LINKNO, SpecimenDate, death_covid, NRS.D
   dplyr::select(-death_covid)
 any_death <- z
 
+all_hospitalisations  <- readRDS(paste0(Location,"EAVE/GPanalysis/data/all_hosps2021-03-01.rds"))
+all_hospitalisations <- left_join(all_hospitalisations, covid_hospitalisations, by="EAVE_LINKNO", suffix=c("","_covid")) %>% 
+  filter(is.na(admission_date_covid) | !is.na(admission_date_covid)&(admission_date_covid > admission_date + 14) ) %>% 
+  dplyr::select(-SpecimenDate, - admission_date_covid)
+#z_sub <- filter(z, !is.na(admission_date_covid))
+
+all_nc_emerg_hosp <- filter(all_hospitalisations, emergency==TRUE) %>% dplyr::select(-emergency)
+all_nc_non_emerg_hosp <- filter(all_hospitalisations, emergency==FALSE) %>% dplyr::select(-emergency)
+
+#this file has not been updated
+#but is OK for the historical calculation which is all that it is needed for
 Positive_Tests <- readRDS(paste0(Location,"EAVE/GPanalysis/data/Positive_Tests.RDS"))
+#should be able to use EAVE_Cohort for this
+#z <- EAVE_cohort %>% filter(result==1) %>% dplyr::select(EAVE_LINKNO, SpecimenDate)
+
+hosp_adm_nov01 <- readRDS(paste0(Location,"EAVE/GPanalysis/data/any_hospitalisation_post_01112020.rds")) %>% 
+  filter(!is.na(EAVE_LINKNO))
 
 #cohort + risk groups
 df_cohort <- EAVE_cohort %>% dplyr::select(EAVE_LINKNO:ur6_2016_name, age_gp, eave_weight) %>% 
@@ -203,12 +231,13 @@ z1 <- df_cohort %>% dplyr::select(-(EAVE_ASTHMA:EAVE_HYPERTENSION), -EAVE_Smoke,
 z1 <- z1 %>% mutate(n_tests = if_else(is.na(n_tests),0L,n_tests) )
 
 df_cohort <- filter(z1, !is.na(eave_weight)) #omit any who - need to fix -  do not match
+df_cohort$n_tests_gp <- cut(df_cohort$n_tests, breaks = c(-1,0,1,2,3,9,100), labels=c("0","1","2","3","4-9","10+"))
 
 z <- df_cohort %>% left_join(dplyr::select(Vaccinations, EAVE_LINKNO, date_vacc_1)) %>% 
   mutate(vacc=if_else(is.na(date_vacc_1),0,1))
 z_sub <- slice_sample(z, n=round(nrow(z)*0.25))
 library(mgcv)
-z1 <- glm(vacc ~ age_gp*Sex + simd2020_sc_quintile + n_tests + n_risk_gps,
+z1 <- glm(vacc ~ age_gp*Sex + simd2020_sc_quintile + n_tests_gp + n_risk_gps,
                 data=z_sub, family=binomial)
 z_ps <- predict(z1, newdata=z, type="response")
  z <- z %>% mutate(prop_score = z_ps) %>% 
@@ -217,10 +246,28 @@ z_ps <- predict(z1, newdata=z, type="response")
    mutate(inv_psw = inv_psw/mean(inv_psw))
 
 df_cohort <- z %>% dplyr::select(-date_vacc_1, -vacc)
-df_cohort$n_tests_gp <- cut(df_cohort$n_tests, breaks = c(-1,0,1,2,3,9,100), labels=c("0","1","2","3","4-9","10+"))
 
- 
- 
+#update weights
+#all known to exist - give a weight of 1 and downweight the rest
+z_ids <- c(Vaccinations$EAVE_LINKNO, any_death$EAVE_LINKNO, covid_hospitalisations$EAVE_LINKNO, 
+           filter(EAVE_cohort, tested==1)$EAVE_LINKNO, hosp_adm_nov01$EAVE_LINKNO) %>% unique()
+#summary(filter(EAVE_cohort, !(EAVE_LINKNO %in% z_ids))$eave_weight)
+z_N <- round(sum(df_cohort$eave_weight) )
+z_k <- sum(df_cohort$EAVE_LINKNO %in% z_ids)
+z_m <- round(sum(filter(df_cohort, (EAVE_LINKNO %in% z_ids))$eave_weight))
+z <- df_cohort %>% mutate(ew = if_else(EAVE_LINKNO %in% z_ids, 1, eave_weight*(z_N - z_k)/(z_N - z_m)) )
+df_cohort <- z %>% dplyr::select(-eave_weight) %>% dplyr::rename(eave_weight=ew)
+
+z <- read_csv(paste0(Location,"/EAVE/GPanalysis/data/restored/map_files/Datazone2011Lookup.csv")) %>% 
+  dplyr::select(DataZone, InterZone, Council, HB)
+df_cohort <- df_cohort %>% left_join(z, by="DataZone") %>% 
+  mutate(HB = if_else(is.na(HB),"Unknown", HB),
+         InterZone = if_else(is.na(InterZone),"Unknown", InterZone),
+         Council = if_else(is.na(Council),"Unknown", Council))
+
+#saveRDS(df_cohort, paste0(project_path,"/output/temp/df_cohort.rds"))
+#df_cohort <- readRDS(paste0(project_path,"/output/temp/df_cohort.rds"))
+
  #adjustment variables
  variables_hosp <- c("age_gp" , "Sex", "simd2020_sc_quintile", "n_tests_gp", "EAVE_BP","Q_DIAG_DIABETES_2"   , "Q_DIAG_COPD"  ,       
                      "Q_DIAG_CKD_LEVEL","Q_DIAG_DEMENTIA","Q_DIAG_STROKE","Q_LEARN_CAT"   ,      
@@ -228,4 +275,5 @@ df_cohort$n_tests_gp <- cut(df_cohort$n_tests, breaks = c(-1,0,1,2,3,9,100), lab
                      "Q_DIAG_EPILEPSY","Q_DIAG_BLOOD_CANCER","Q_DIAG_VTE","Q_DIAG_CIRRHOSIS" ,   
                      "Q_DIAG_RA_SLE","Q_DIAG_PVD","Q_DIAG_AF","Q_DIAG_PULM_RARE" ,   
                      "Q_DIAG_PARKINSONS","Q_DIAG_DIABETES_1","Q_DIAG_PULM_HYPER")
- 
+
+rm(z_sub, z1)

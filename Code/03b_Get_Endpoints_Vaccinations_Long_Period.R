@@ -15,17 +15,19 @@
 # Approximate run time: Unknown
 ##########################################################
 output_list <- list()
-z_event_endpoint <- "hosp_covid" #hosp, death or icu_death
+z_event_endpoint <- "death_covid" #hosp, death or icu_death any_nc_em
 if (z_event_endpoint =="hosp_covid") z_event <- covid_hospitalisations
 if (z_event_endpoint =="icu_death") z_event <- covid_icu_death
 if (z_event_endpoint =="death_covid") z_event <- covid_death
 if (z_event_endpoint =="any_death") z_event <- any_death
+if (z_event_endpoint =="any_nc_non_emerg_adm") z_event <- all_nc_non_emerg_hosp
+if (z_event_endpoint =="any_nc_emerg_adm") z_event <- all_nc_emerg_hosp
 
 a_end <- max(z_event$admission_date)
 output_list$endpoint <- z_event_endpoint
 output_list$number_events <- nrow(z_event)
 output_list$last_event <- a_end
-z_n_controls_per_event <- 50 #faster than 100
+z_n_controls_per_event <- 100 #faster than 100
 output_list$controls_per_event <- z_n_controls_per_event
 
 #make anyone vaccinated after the maximum endpoint time unvaccinated
@@ -80,5 +82,9 @@ df <- df %>% left_join(dplyr::select(Vaccinations, EAVE_LINKNO, vacc_type) , by=
 
 df <- df %>% mutate(weight = if_else(event==1,1,nrow(df_cohort)/(z_n_controls_per_event*nrow(z_event)) ) )  %>% 
   mutate(weight = if_else(event==1,1, eave_weight*weight) ) 
+
+#modify the in-hosp variable to be binary
+#df <- df %>% mutate(in_hosp= if_else(in_hosp>1,1L,in_hosp))
+#table(df$in_hosp,df$event)
 
 saveRDS(df, paste0(project_path,"/output/temp/df_",z_event_endpoint,".RDS"))

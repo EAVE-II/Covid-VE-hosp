@@ -22,14 +22,14 @@ project_path <- paste0(Location,"EAVE/GPanalysis/progs/CR/Vaccine")
 
 results_list_adj <- readRDS(paste0(project_path,"/output/temp/CR_cohort_adj_hosp_covid.RDS"))
 results_adj <- results_list_adj$results
-#results_adj <- filter(results_adj, !(Vacc.Status %in% c("v2_0:6",   "v2_7+")))
+results_adj <- filter(results_adj, !(Vacc.Status %in% c("v2_0:6",   "v2_7+")))
 results_adj$Vacc.Status <- factor(results_adj$Vacc.Status, levels = c("uv", "v1_0:6","v1_7:13",
       "v1_14:20", "v1_21:27", "v1_28:34", "v1_35:41", "v1_42+" ,  "v2_0:6",   "v2_7+"))
 
 
 results_list_ipw <- readRDS(paste0(project_path,"/output/temp/CR_cohort_ipw_hosp_covid.RDS"))
 results_ipw <- results_list_ipw$results
-#results_ipw <- filter(results_ipw, !(Vacc.Status %in% c("v2_0:6",   "v2_7+")))
+results_ipw <- filter(results_ipw, !(Vacc.Status %in% c("v2_0:6",   "v2_7+")))
 results_ipw$Vacc.Status <- factor(results_ipw$Vacc.Status, levels = c("uv", "v1_0:6","v1_7:13",
       "v1_14:20", "v1_21:27", "v1_28:34", "v1_35:41", "v1_42+" ,  "v2_0:6",   "v2_7+"))
 
@@ -51,6 +51,8 @@ if (results_list_adj$endpoint == "icu_death") z_endpoint <-  "Severe Outcome - I
 ##  Endpoint: `r z_endpoint`
 
 ## Introduction
+
+This run includes the day 0-6 estimates but the refernece groupi is now day 7-13.  
 
 The endpoint is this report is `r results_list_adj$endpoint`.  There are `r results_list_adj$number_events` events from December 08, 2020 until `r format(results_list_adj$last_event, "%d %B %Y")`.  The adjusted estimates in this report represent those obtained from `r results_list_adj$adjustment` adjustment.  Additionally the adjusted estimates are obtained from inverse propensity weighting.
 
@@ -129,7 +131,7 @@ z_tab <- kableExtra::kbl(z_res,
   kableExtra::column_spec(c(4,7,10), width="5em") %>% 
   kableExtra::add_header_above(c(" " = 3, "Age adjusted" = 3, "Adjusted" = 3, "IPW" = 3))
 
-print(z_tab)
+#print(z_tab)
 
 z_res <- z_res %>%  mutate(ve=100*(1-HR_ipw), LCL_ve = 100*(1-UCL_ipw), UCL_ve = 100*(1-LCL_ipw))
 
